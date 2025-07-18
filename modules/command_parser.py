@@ -52,6 +52,15 @@ class CommandParser:
             r'capture(?: of)? (.+?)(?:\s|$)': {'action': 'screenshot', 'target': 'group1'},
             r'read text(?: from)? (.+?)(?:\s|$)': {'action': 'read_text', 'target': 'group1'},
             r'ocr(?: on)? (.+?)(?:\s|$)': {'action': 'read_text', 'target': 'group1'},
+            
+            # Gemini format patterns with colons
+            r'click:\s*(.+?)(?:\s|$)': {'action': 'click', 'target': 'group1'},
+            r'double.?click:\s*(.+?)(?:\s|$)': {'action': 'double_click', 'target': 'group1'},
+            r'right.?click:\s*(.+?)(?:\s|$)': {'action': 'right_click', 'target': 'group1'},
+            r'type:\s*(.+?)(?:\s|$)': {'action': 'type', 'text': 'group1'},
+            r'press:\s*(.+?)(?:\s|$)': {'action': 'key_press', 'text': 'group1'},
+            r'wait:\s*(\d+\.?\d*)': {'action': 'wait', 'duration': 'group1'},
+            r'scroll:\s*(up|down)(?: (\d+))?': {'action': 'scroll', 'direction': 'group1', 'amount': 'group2'},
         }
         
         # Patterns for composite commands
@@ -70,6 +79,51 @@ class CommandParser:
         # Pre-process command to remove markdown and other formatting
         command = command.replace('**', '').replace('`', '')
         
+        # First, check for Gemini-style commands with colons
+        if ':' in command:
+            # Parse Gemini format: action: value
+            parts = command.split(':', 1)
+            if len(parts) == 2:
+                action_type = parts[0].strip()
+                value = parts[1].strip()
+                
+                # Map action types to internal actions
+                if action_type == 'click':
+                    # Check if value is coordinates
+                    coord_match = re.search(r'\[(\d+),\s*(\d+)\]', value)
+                    if coord_match:
+                        x, y = int(coord_match.group(1)), int(coord_match.group(2))
+                        return [{'action': 'click', 'target': (x, y)}]
+                    else:
+                        return [{'action': 'click', 'target': value}]
+                elif action_type == 'double_click' or action_type == 'doubleclick':
+                    return [{'action': 'double_click', 'target': value}]
+                elif action_type == 'right_click' or action_type == 'rightclick':
+                    return [{'action': 'right_click', 'target': value}]
+                elif action_type == 'type':
+                    return [{'action': 'type', 'text': value}]
+                elif action_type == 'press':
+                    return [{'action': 'key_press', 'text': value}]
+                elif action_type == 'wait':
+                    try:
+                        duration = float(value)
+                        return [{'action': 'wait', 'duration': str(duration)}]
+                    except ValueError:
+                        return [{'action': 'wait', 'duration': '1.0'}]
+                elif action_type == 'scroll':
+                    direction = 'down'
+                    amount = 3
+                    if 'up' in value:
+                        direction = 'up'
+                    
+                    # Try to extract amount
+                    amount_match = re.search(r'(\d+)', value)
+                    if amount_match:
+                        amount = int(amount_match.group(1))
+                    
+                    return [{'action': 'scroll', 'clicks': str(amount if direction == 'up' else -amount)}]
+        
+        # If not a Gemini format or parsing failed, try regular patterns
         # First check for direct commands that we know will work
         if command.startswith('hotkey win+r'):
             return [{'action': 'hotkey', 'text': 'win+r'}]

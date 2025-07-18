@@ -1,0 +1,14 @@
+Step 1: Before key_press
+Step 2: After key_press
+Step 3: Before wait
+Step 4: After wait
+Step 5: Before type
+Step 6: After type
+Step 7: Before key_press
+Step 8: After key_press
+Step 9: Before wait
+Step 10: After wait
+Step 11: Before click on octagon shape tool in paint ribbon
+Step 12: ERROR: click failed - Unknown target: octagon shape tool in paint ribbon
+Step 13: Before click on search icon on taskbar
+Step 14: ERROR: click failed - Unknown target: search icon on taskbar

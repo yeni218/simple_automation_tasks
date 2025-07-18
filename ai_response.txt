@@ -1,0 +1,15 @@
+--- LAST RESPONSE ---
+click: Search bar
+type: paint
+press: enter
+wait: 3
+click: Rectangle shape tool
+click: Paint canvas
+
+--- PARSED COMMANDS ---
+click: Search bar
+type: paint
+press: enter
+wait: 3
+click: Rectangle shape tool
+click: Paint canvas

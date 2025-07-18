@@ -1,0 +1,2 @@
+Step 1: Before click on start button
+Step 2: ERROR: click failed - Unknown target: start button

@@ -5,12 +5,15 @@ import sys
 import os
 import json
 import time  # Add time import
+import datetime  # Add datetime import
 import tkinter as tk
 import customtkinter as ctk
 from tkinter import filedialog
 from tkinter import messagebox
 import threading
 import tkinter.ttk as ttk
+from PIL import Image, ImageTk  # Add PIL imports
+import pyautogui  # Add pyautogui import
 
 # Set appearance mode and theme
 ctk.set_appearance_mode("Light")  # Modes: "System" (standard), "Dark", "Light"
@@ -179,40 +182,126 @@ class EnhancedAIControllerGUI(AIControllerGUI):
         ai_frame = ctk.CTkFrame(parent)
         ai_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Instructions label
-        ctk.CTkLabel(ai_frame, text="Enter natural language instructions for automation:").pack(anchor=tk.W, pady=(0, 5))
+        # IMPORTANT NOTICE at the top
+        notice_frame = ctk.CTkFrame(ai_frame, fg_color="#ffcc00")
+        notice_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # Text area for instructions
-        self.ai_instructions = ctk.CTkTextbox(ai_frame, height=100)
-        self.ai_instructions.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        notice_label = ctk.CTkLabel(
+            notice_frame,
+            text="⚠️ IMPORTANT: AI will analyze each step during automation ⚠️\n"
+                 "Step-by-step results will appear below",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#000000"
+        )
+        notice_label.pack(pady=10)
+        
+        # Create main content frame with two columns
+        content_frame = ctk.CTkFrame(ai_frame)
+        content_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Left column - Screenshot preview and controls
+        left_column = ctk.CTkFrame(content_frame)
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        
+        # Screenshot preview panel
+        preview_frame = ctk.CTkFrame(left_column)
+        preview_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        preview_label = ctk.CTkLabel(
+            preview_frame, 
+            text="Current Context Screenshot:",
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        preview_label.pack(anchor=tk.W, pady=(5, 0))
+        
+        # Screenshot container with border
+        screenshot_container = ctk.CTkFrame(preview_frame, border_width=1, border_color="#AAAAAA")
+        screenshot_container.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        self.screenshot_preview_label = ctk.CTkLabel(screenshot_container, text="No screenshot yet")
+        self.screenshot_preview_label.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.screenshot_preview_image = None  # To hold the PhotoImage reference
+        
+        # Navigation for step-by-step screenshots
+        nav_frame = ctk.CTkFrame(preview_frame)
+        nav_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        self.screenshot_list = []
+        self.screenshot_index = tk.IntVar(value=0)
+        
+        self.prev_btn = ctk.CTkButton(nav_frame, text="< Prev", command=self.show_prev_screenshot, state=tk.DISABLED)
+        self.prev_btn.pack(side=tk.LEFT, padx=2)
+        
+        self.next_btn = ctk.CTkButton(nav_frame, text="Next >", command=self.show_next_screenshot, state=tk.DISABLED)
+        self.next_btn.pack(side=tk.LEFT, padx=2)
+        
+        self.screenshot_counter_label = ctk.CTkLabel(nav_frame, text="")
+        self.screenshot_counter_label.pack(side=tk.LEFT, padx=5)
+        
+        # Take screenshot button
+        screenshot_btn = ctk.CTkButton(
+            left_column, 
+            text="📷 Take Screenshot",
+            height=40,
+            command=self.take_screenshot_for_ai
+        )
+        screenshot_btn.pack(fill=tk.X, pady=(0, 10))
+        
+        # Right column - Instructions and controls
+        right_column = ctk.CTkFrame(content_frame)
+        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        
+        # Instructions label
+        ctk.CTkLabel(right_column, text="Enter natural language instructions for automation:").pack(anchor=tk.W, pady=(0, 5))
+        
+        # Text area for instructions - smaller height
+        self.ai_instructions = ctk.CTkTextbox(right_column, height=150)
+        self.ai_instructions.pack(fill=tk.X, expand=False, pady=(0, 10))
         
         # Example instructions
         examples = [
             "Open Notepad and type 'Hello, world!'",
-            "Open Calculator, click on 5, then +, then 3, then =",
-            "Open Paint, draw a rectangle in the center"
+            "Open Calculator, click on 5, then +, then 3, then ="
         ]
         example_text = "Examples:\n" + "\n".join(f"• {ex}" for ex in examples)
-        ctk.CTkLabel(ai_frame, text=example_text, text_color="gray").pack(anchor=tk.W, pady=(0, 10))
+        ctk.CTkLabel(right_column, text=example_text, text_color="gray").pack(anchor=tk.W, pady=(0, 10))
+        
+        # AI Engine selection
+        engine_frame = ctk.CTkFrame(right_column)
+        engine_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ctk.CTkLabel(engine_frame, text="AI Engine:", width=80).pack(side=tk.LEFT, padx=5)
+        
+        # Dropdown for AI model selection
+        ai_models = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"]
+        self.ai_model_var = tk.StringVar(value=ai_models[0])
+        ai_model_dropdown = ctk.CTkComboBox(
+            engine_frame,
+            values=ai_models,
+            variable=self.ai_model_var,
+            width=200
+        )
+        ai_model_dropdown.pack(side=tk.LEFT, padx=5)
         
         # Options frame
-        options_frame = ctk.CTkFrame(ai_frame)
+        options_frame = ctk.CTkFrame(right_column)
         options_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Visual feedback option
         self.visual_feedback_var = tk.BooleanVar(value=True)
         visual_feedback_cb = ctk.CTkCheckBox(
             options_frame,
-            text="Show visual feedback (slower but visible mouse movements)",
+            text="Show visual feedback",
             variable=self.visual_feedback_var,
             command=self.toggle_visual_feedback
         )
         visual_feedback_cb.pack(side=tk.LEFT, padx=5)
         
         # Speed slider
-        speed_frame = ctk.CTkFrame(ai_frame)
+        speed_frame = ctk.CTkFrame(right_column)
         speed_frame.pack(fill=tk.X, pady=(0, 10))
-        ctk.CTkLabel(speed_frame, text="Movement Speed:", width=120).pack(side=tk.LEFT, padx=5)
+        
+        ctk.CTkLabel(speed_frame, text="Speed:", width=60).pack(side=tk.LEFT, padx=5)
         
         self.speed_slider = ctk.CTkSlider(
             speed_frame,
@@ -227,30 +316,62 @@ class EnhancedAIControllerGUI(AIControllerGUI):
         self.speed_label = ctk.CTkLabel(speed_frame, text="0.5s")
         self.speed_label.pack(side=tk.LEFT, padx=5)
         
-        # Buttons frame
-        btn_frame = ctk.CTkFrame(ai_frame)
-        btn_frame.pack(fill=tk.X, pady=10)
-        
-        # Execute button
+        # Execute button - make it more prominent
         execute_btn = ctk.CTkButton(
-            btn_frame, 
-            text="Execute Instructions", 
+            right_column, 
+            text="▶️ Execute Instructions",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#28a745",  # Green color
+            hover_color="#218838",  # Darker green on hover
+            height=40,
             command=self.execute_ai_instructions
         )
-        execute_btn.pack(side=tk.LEFT, padx=(0, 10))
+        execute_btn.pack(fill=tk.X, pady=(0, 10))
         
-        # Take screenshot button
-        screenshot_btn = ctk.CTkButton(
-            btn_frame, 
-            text="Take Screenshot for Context", 
-            command=self.take_screenshot_for_ai
+        # Create workflow button
+        create_workflow_btn = ctk.CTkButton(
+            right_column, 
+            text="💾 Create Workflow",
+            height=30,
+            command=self.create_workflow_from_ai
         )
-        screenshot_btn.pack(side=tk.LEFT)
+        create_workflow_btn.pack(fill=tk.X, pady=(0, 10))
+        
+        # Step cards frame
+        self.step_cards_frame = ctk.CTkFrame(ai_frame, border_width=1)
+        self.step_cards_frame.pack(fill=tk.X, pady=(5, 10))
+        
+        # Header for step cards with more prominent styling
+        header_label = ctk.CTkLabel(
+            self.step_cards_frame, 
+            text="Execution Steps:", 
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        header_label.pack(anchor=tk.W, padx=5, pady=5)
+        
+        # Scrollable frame for step cards with increased height
+        self.steps_container = ctk.CTkScrollableFrame(self.step_cards_frame, height=200)
+        self.steps_container.pack(fill=tk.X, expand=True, padx=5, pady=5)
+        
+        # Add an initial message in the steps container
+        initial_msg = ctk.CTkLabel(
+            self.steps_container,
+            text="Steps will appear here during execution...",
+            text_color="gray"
+        )
+        initial_msg.pack(pady=10)
+        self.initial_step_msg = initial_msg  # Store reference to remove it later
         
         # Results frame
         results_frame = ctk.CTkFrame(ai_frame)
         results_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        ctk.CTkLabel(results_frame, text="Execution Results:").pack(anchor=tk.W, padx=5, pady=5)
+        
+        results_header = ctk.CTkLabel(
+            results_frame, 
+            text="Execution Results:", 
+            font=ctk.CTkFont(weight="bold")
+        )
+        results_header.pack(anchor=tk.W, padx=5, pady=5)
         
         # Results text area
         self.ai_results = ctk.CTkTextbox(results_frame, height=150)
@@ -259,7 +380,7 @@ class EnhancedAIControllerGUI(AIControllerGUI):
         # Screenshot path variable and label
         self.screenshot_path = tk.StringVar()
         self.screenshot_path.set("")
-        ctk.CTkLabel(ai_frame, textvariable=self.screenshot_path).pack(anchor=tk.W, pady=(5, 0))
+        ctk.CTkLabel(ai_frame, textvariable=self.screenshot_path, text_color="gray").pack(anchor=tk.W, pady=(5, 0))
         
     # UI Elements tab methods
     def show_element_details(self, event):
@@ -328,7 +449,6 @@ class EnhancedAIControllerGUI(AIControllerGUI):
             
             # Show screenshot selector dialog
             from tkinter import simpledialog
-            from PIL import ImageTk
             
             class ScreenshotSelector:
                 def __init__(self, parent, screenshot):
@@ -346,8 +466,8 @@ class EnhancedAIControllerGUI(AIControllerGUI):
                     self.canvas.create_image(0, 0, image=self.tk_image, anchor=tk.NW)
                     
                     # Variables to store selection
-                    self.start_x = None
-                    self.start_y = None
+                    self.start_x = 0.0  # Initialize with default values
+                    self.start_y = 0.0  # Initialize with default values
                     self.rect_id = None
                     self.selection = None
                     
@@ -369,8 +489,8 @@ class EnhancedAIControllerGUI(AIControllerGUI):
                     
                 def on_mouse_down(self, event):
                     """Handle mouse button down event"""
-                    self.start_x = self.canvas.canvasx(event.x)
-                    self.start_y = self.canvas.canvasy(event.y)
+                    self.start_x = float(self.canvas.canvasx(event.x))
+                    self.start_y = float(self.canvas.canvasy(event.y))
                     
                     # Create rectangle
                     if self.rect_id:
@@ -383,16 +503,16 @@ class EnhancedAIControllerGUI(AIControllerGUI):
                 def on_mouse_move(self, event):
                     """Handle mouse movement event"""
                     if self.rect_id:
-                        cur_x = self.canvas.canvasx(event.x)
-                        cur_y = self.canvas.canvasy(event.y)
+                        cur_x = float(self.canvas.canvasx(event.x))
+                        cur_y = float(self.canvas.canvasy(event.y))
                         self.canvas.coords(self.rect_id, self.start_x, self.start_y, cur_x, cur_y)
                         
                 def on_mouse_up(self, event):
                     """Handle mouse button up event"""
-                    end_x = self.canvas.canvasx(event.x)
-                    end_y = self.canvas.canvasy(event.y)
+                    end_x = float(self.canvas.canvasx(event.x))
+                    end_y = float(self.canvas.canvasy(event.y))
                     
-                    # Calculate rectangle coordinates
+                    # Calculate rectangle coordinates - ensure we have valid values
                     x1 = min(self.start_x, end_x)
                     y1 = min(self.start_y, end_y)
                     x2 = max(self.start_x, end_x)
@@ -588,6 +708,16 @@ class EnhancedAIControllerGUI(AIControllerGUI):
         self.ai_results.delete("0.0", "end")
         self.ai_results.insert("0.0", f"Processing instructions: {instructions}\n\n")
         
+        # Clear previous step cards
+        self.clear_step_cards()
+        
+        # Connect step callback to controller - CRITICAL for visual feedback
+        if hasattr(self.controller, 'set_step_callback'):
+            self.controller.set_step_callback(self.on_step_screenshot_callback)
+            print("Connected step callback to controller")
+        else:
+            print("Warning: Controller does not have set_step_callback method")
+        
         # Check API connection first
         api_endpoint = self.controller.api_endpoint
         self.ai_results.insert("end", f"Using API endpoint: {api_endpoint}\n")
@@ -622,6 +752,34 @@ class EnhancedAIControllerGUI(AIControllerGUI):
             if self.screenshot_path.get() and os.path.exists(self.screenshot_path.get()):
                 screenshot = self.screenshot_path.get()
                 self.ai_results.insert("end", f"Using screenshot for context: {screenshot}\n\n")
+                
+                # Update the model in AI manager based on user selection if available
+                if hasattr(self, 'ai_model_var'):
+                    selected_model = self.ai_model_var.get()
+                    self.ai_manager.model_name = selected_model
+                    self.ai_results.insert("end", f"Using {selected_model} for visual analysis...\n")
+                    # Reconfigure the API with the new model
+                    if hasattr(self.ai_manager, 'configure_api'):
+                        self.ai_manager.configure_api()
+                        self.ai_results.insert("end", "Reconfigured API with selected model\n")
+                
+                # First, detect UI elements in the screenshot to ensure AI can see what's on screen
+                self.ai_results.insert("end", "Detecting UI elements in screenshot...\n")
+                ui_elements = self.ai_manager.detect_ui_elements(screenshot)
+                
+                if ui_elements and len(ui_elements) > 0:
+                    self.ai_results.insert("end", f"✓ Found {len(ui_elements)} UI elements\n")
+                    
+                    # Create an annotated screenshot
+                    annotated_path = self.ai_manager.annotate_detected_ui_elements(screenshot)
+                    if annotated_path:
+                        # Display the annotated screenshot
+                        self.update_screenshot_preview(annotated_path)
+                        self.ai_results.insert("end", f"UI elements annotated in preview\n")
+                else:
+                    self.ai_results.insert("end", "No UI elements detected in screenshot. This may cause issues.\n")
+                
+                # Execute the instructions with visual context
                 success = self.ai_manager.execute_vision_instructions(instructions, screenshot)
                 
                 # If vision instructions failed but succeeded in generating commands, show them
@@ -633,7 +791,16 @@ class EnhancedAIControllerGUI(AIControllerGUI):
                             self.ai_results.insert("end", f"- {cmd}\n")
             else:
                 # Use regular AI instructions (will always try API first now)
-                success = self.ai_manager.execute_ai_instructions(instructions)
+                self.ai_results.insert("end", "No screenshot provided. Taking one now for context...\n")
+                
+                # Take a screenshot automatically if none exists
+                new_screenshot = self.take_screenshot_for_ai()
+                if new_screenshot and os.path.exists(new_screenshot):
+                    self.ai_results.insert("end", f"Using new screenshot: {new_screenshot}\n")
+                    success = self.ai_manager.execute_vision_instructions(instructions, new_screenshot)
+                else:
+                    # Fall back to text-only if screenshot fails
+                    success = self.ai_manager.execute_ai_instructions(instructions)
                 
                 # Show commands that were used
                 if hasattr(self.ai_manager, 'last_commands'):
@@ -645,6 +812,28 @@ class EnhancedAIControllerGUI(AIControllerGUI):
                 
             if success:
                 self.ai_results.insert("end", "✓ Instructions executed successfully\n")
+                
+                # If success is a string, it might be the path to the session directory
+                if isinstance(success, str) and os.path.exists(success):
+                    self.ai_results.insert("end", f"Execution logs saved to: {success}\n")
+                
+                # Update screenshot list for navigation
+                self.screenshot_list = []
+                for root, dirs, files in os.walk(success):
+                    for file in files:
+                        if file.endswith(".png"):
+                            self.screenshot_list.append(os.path.join(root, file))
+                    
+                    # Sort screenshots by name (which includes step number)
+                    self.screenshot_list.sort()
+                    
+                    # Update navigation
+                    if self.screenshot_list:
+                        self.screenshot_index.set(0)
+                        self.update_screenshot_preview(self.screenshot_list[0])
+                self.update_screenshot_counter()
+                self.prev_btn.configure(state=tk.DISABLED)
+                self.next_btn.configure(state=tk.NORMAL if len(self.screenshot_list) > 1 else tk.DISABLED)
             else:
                 self.ai_results.insert("end", "✗ Failed to execute instructions\n")
                 self.ai_results.insert("end", "\nTo ensure AI automation works correctly:\n")
@@ -655,6 +844,9 @@ class EnhancedAIControllerGUI(AIControllerGUI):
                 
         except Exception as e:
             self.ai_results.insert("end", f"✗ Error during execution: {str(e)}\n")
+            import traceback
+            traceback_info = traceback.format_exc()
+            self.ai_results.insert("end", f"Traceback:\n{traceback_info}\n")
         finally:
             # Show the application window again
             self.root.deiconify()
@@ -683,10 +875,13 @@ class EnhancedAIControllerGUI(AIControllerGUI):
             self.ai_results.delete("0.0", "end")
             self.ai_results.insert("0.0", f"Screenshot saved to {filename}\n")
             
+            return filename # Return the path for use in execute_ai_instructions
+            
         except Exception as e:
             messagebox.showerror("Screenshot Error", f"Failed to take screenshot: {str(e)}")
+            return None
         finally:
-            # Show the application window again
+            # Always show the application window again
             self.root.deiconify()
             
     def setup_gui(self):
@@ -729,7 +924,6 @@ class EnhancedAIControllerGUI(AIControllerGUI):
             
         try:
             # Open image using PIL
-            from PIL import Image, ImageTk
             
             # Load and resize image for preview
             pil_image = Image.open(image_path)
@@ -767,6 +961,236 @@ class EnhancedAIControllerGUI(AIControllerGUI):
             error_label = ctk.CTkLabel(self.preview_frame, text=f"Error loading image: {str(e)}")
             error_label.pack(expand=True)
 
+    def show_prev_screenshot(self):
+        """Show previous screenshot in the navigation"""
+        if self.screenshot_list and self.screenshot_index.get() > 0:
+            self.screenshot_index.set(self.screenshot_index.get() - 1)
+            self.update_screenshot_preview(self.screenshot_list[self.screenshot_index.get()])
+            self.update_screenshot_counter()
+            
+            # Enable/disable navigation buttons
+            self.next_btn.configure(state=tk.NORMAL)
+            if self.screenshot_index.get() == 0:
+                self.prev_btn.configure(state=tk.DISABLED)
+
+    def show_next_screenshot(self):
+        """Show next screenshot in the navigation"""
+        if self.screenshot_list and self.screenshot_index.get() < len(self.screenshot_list) - 1:
+            self.screenshot_index.set(self.screenshot_index.get() + 1)
+            self.update_screenshot_preview(self.screenshot_list[self.screenshot_index.get()])
+            self.update_screenshot_counter()
+            
+            # Enable/disable navigation buttons
+            self.prev_btn.configure(state=tk.NORMAL)
+            if self.screenshot_index.get() == len(self.screenshot_list) - 1:
+                self.next_btn.configure(state=tk.DISABLED)
+
+    def update_screenshot_counter(self):
+        """Update the screenshot counter label"""
+        if self.screenshot_list:
+            self.screenshot_counter_label.configure(text=f"{self.screenshot_index.get() + 1} / {len(self.screenshot_list)}")
+        else:
+            self.screenshot_counter_label.configure(text="")
+            
+    def update_screenshot_preview(self, image_path):
+        """Update the screenshot preview with the given image"""
+        import os
+        from PIL import Image, ImageTk
+        
+        if not image_path or not os.path.exists(image_path):
+            self.screenshot_preview_label.configure(text="No screenshot available", image=None)
+            self.screenshot_preview_image = None
+            return
+            
+        try:
+            # Load and resize the image
+            img = Image.open(image_path)
+            img.thumbnail((400, 250))  # Resize to fit in preview area
+            self.screenshot_preview_image = ImageTk.PhotoImage(img)
+            self.screenshot_preview_label.configure(image=self.screenshot_preview_image, text="")
+        except Exception as e:
+            self.screenshot_preview_label.configure(text=f"Error loading image: {str(e)}", image=None)
+            self.screenshot_preview_image = None
+            
+    def add_step_card(self, step_num, description, image_path):
+        """Add a new step card with screenshot to the UI
+        
+        Args:
+            step_num: Step number
+            description: Description of the step
+            image_path: Path to the step screenshot
+        """
+        try:
+            # Remove the initial message on first card
+            if hasattr(self, 'initial_step_msg') and self.initial_step_msg is not None:
+                self.initial_step_msg.destroy()
+                self.initial_step_msg = None
+                
+            print(f"Adding step card: {step_num} - {description} - {image_path}")
+            
+            # Create a frame for this step card
+            card_frame = ctk.CTkFrame(self.steps_container)
+            card_frame.pack(fill=tk.X, padx=5, pady=5, expand=True)
+            
+            # Step header with number and description
+            header_frame = ctk.CTkFrame(card_frame)
+            header_frame.pack(fill=tk.X, padx=5, pady=2)
+            
+            # Check if this is an AI analysis result (contains a status indicator)
+            is_ai_analysis = " - " in description and any(indicator in description.lower() for indicator in ["success", "failed", "error", "not found"])
+            
+            step_label = ctk.CTkLabel(header_frame, text=f"Step {step_num}:", width=60)
+            step_label.pack(side=tk.LEFT, padx=5)
+            
+            # If this is an AI analysis, format it nicely with status indicator
+            if is_ai_analysis:
+                # Split description into action and analysis
+                parts = description.split(" - ", 1)
+                action = parts[0]
+                analysis = parts[1] if len(parts) > 1 else ""
+                
+                # Determine status color based on text
+                status_color = "#00CC00"  # Default green for success
+                if any(word in analysis.lower() for word in ["failed", "error", "not found"]):
+                    status_color = "#FF3300"  # Red for failure
+                elif any(word in analysis.lower() for word in ["trying", "searching"]):
+                    status_color = "#FFCC00"  # Yellow for in-progress
+                
+                # Create action label
+                action_label = ctk.CTkLabel(header_frame, text=action, anchor="w")
+                action_label.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+                
+                # Create analysis frame
+                analysis_frame = ctk.CTkFrame(card_frame)
+                analysis_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
+                
+                # Add AI icon and analysis text
+                ai_label = ctk.CTkLabel(analysis_frame, text="🤖", width=20)
+                ai_label.pack(side=tk.LEFT, padx=(5, 0))
+                
+                analysis_text = ctk.CTkLabel(
+                    analysis_frame, 
+                    text=analysis,
+                    text_color=status_color,
+                    anchor="w"
+                )
+                analysis_text.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+            else:
+                # Regular description without special formatting
+                desc_label = ctk.CTkLabel(header_frame, text=description, anchor="w")
+                desc_label.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+            
+            # Image frame (if image path is provided)
+            if image_path and os.path.exists(image_path):
+                image_frame = ctk.CTkFrame(card_frame)
+                image_frame.pack(fill=tk.X, padx=5, pady=5)
+                
+                try:
+                    # Load and resize the image
+                    img = Image.open(image_path)
+                    img.thumbnail((300, 200))  # Resize image to fit in card
+                    photo_img = ImageTk.PhotoImage(img)
+                    
+                    # Create label with image
+                    img_label = tk.Label(
+                        image_frame, 
+                        image=photo_img,
+                        bg=ctk.ThemeManager.theme["CTkFrame"]["fg_color"][1]
+                    )
+                    # Store reference to prevent garbage collection
+                    # We need to store it in a way the linter won't complain about
+                    setattr(img_label, "_image_keep", photo_img)
+                    img_label.pack(pady=5)
+                except Exception as e:
+                    # If image loading fails, show error text
+                    error_label = ctk.CTkLabel(image_frame, text=f"Error loading image: {str(e)}")
+                    error_label.pack(pady=5)
+            
+            # Add the card to our list for reference
+            if not hasattr(self, 'step_cards'):
+                self.step_cards = []
+                
+            self.step_cards.append({
+                'frame': card_frame,
+                'step_num': step_num,
+                'description': description,
+                'image_path': image_path
+            })
+            
+            # Make sure the UI updates
+            self.root.update_idletasks()
+            
+            return card_frame
+            
+        except Exception as e:
+            print(f"Error creating step card: {str(e)}")
+            return None
+            
+    def clear_step_cards(self):
+        """Clear all step cards from the UI"""
+        if hasattr(self, 'step_cards'):
+            for card in self.step_cards:
+                if card.get('frame'):
+                    card['frame'].destroy()
+            self.step_cards = []
+            
+        # Restore the initial message
+        if not hasattr(self, 'initial_step_msg') or self.initial_step_msg is None:
+            self.initial_step_msg = ctk.CTkLabel(
+                self.steps_container,
+                text="Steps will appear here during execution...",
+                text_color="gray"
+            )
+            self.initial_step_msg.pack(pady=10)
+            
+    def create_workflow_from_ai(self):
+        """Create a workflow from the current AI instructions"""
+        instructions = self.ai_instructions.get("0.0", "end").strip()
+        if not instructions:
+            messagebox.showwarning("Empty Instructions", "Please enter instructions for automation")
+            return
+            
+        # Get commands from AI manager if available
+        if hasattr(self.ai_manager, 'last_commands') and self.ai_manager.last_commands:
+            commands = self.ai_manager.last_commands
+            
+            # Ask for workflow name
+            from tkinter import simpledialog
+            workflow_name = simpledialog.askstring(
+                "Workflow Name", 
+                "Enter a name for this workflow:",
+                initialvalue="ai_workflow"
+            )
+            
+            if workflow_name:
+                # Create the workflow
+                self.workflow_manager.create_workflow(workflow_name, commands)
+                messagebox.showinfo("Workflow Created", f"Workflow '{workflow_name}' created successfully")
+                
+                # Update the workflow list if we're on that tab
+                self.update_workflow_list()
+        else:
+            messagebox.showwarning("No Commands", "No commands available to create workflow")
+            
+    def on_step_screenshot_callback(self, step_num, description, image_path):
+        """Callback for step screenshots to add step cards
+        
+        Args:
+            step_num: Step number
+            description: Description of the step
+            image_path: Path to the screenshot image
+        """
+        print(f"Step callback received: {step_num} - {description} - {image_path}")
+        
+        # This needs to be run in the main thread since it updates the UI
+        self.root.after(0, lambda: self.add_step_card(step_num, description, image_path))
+        
+        # Update the current preview
+        self.root.after(0, lambda: self.update_screenshot_preview(image_path))
+        
+        # Make sure the UI updates
+        self.root.update_idletasks()
+
 
 class EnhancedAIVisionController(AIVisionController):
     """Enhanced controller with additional integration"""
@@ -780,6 +1204,16 @@ class EnhancedAIVisionController(AIVisionController):
         self.command_parser = None
         self.workflow_manager = None
         self.ai_manager = None
+        self.step_callback = None
+        
+    def set_step_callback(self, callback):
+        """Set callback function for step updates
+        
+        Args:
+            callback: Function to call with (step_number, description, image_path)
+        """
+        self.step_callback = callback
+        self.on_step_screenshot = callback
         
     def toggle_visual_feedback(self, enable=None):
         """Toggle visual feedback mode"""
@@ -790,88 +1224,260 @@ class EnhancedAIVisionController(AIVisionController):
             return False
         
     def execute_command_sequence(self, commands):
-        """Execute a sequence of commands"""
-        for command in commands:
-            print(f"Executing: {command}")
-            if self.command_parser:
-                actions = self.command_parser.parse_natural_language_command(command)
-                # Ensure actions is a list
-                if actions is None:
-                    actions = []
-            else:
-                # Fallback if parser not initialized
-                print("Warning: Command parser not initialized")
-                return
+        """Execute a sequence of commands with AI analysis at each step
+        
+        Args:
+            commands: List of commands to execute
             
-            if not actions:
-                print(f"No actions could be parsed from command: {command}")
-                continue
-                
-            for action in actions:
-                action_type = action.get('action', '')
-                target = action.get('target')
-                text = action.get('text')
-                
-                # Handle special cases for numeric values stored as strings
-                kwargs = {}
-                for key, value in action.items():
-                    if key in ['action', 'target', 'text']:
-                        continue
-                        
-                    if key == 'clicks' and isinstance(value, str):
+        Returns:
+            str or bool: Path to session directory if successful, False otherwise
+        """
+        if not commands:
+            print("No commands to execute")
+            return False
+            
+        # List to store screenshots paths for reference
+        screenshot_paths = []
+        
+        # Track overall success status
+        overall_success = True
+        
+        try:
+            # Log execution
+            print(f"Executing {len(commands)} commands...")
+            
+            # Make sure step counter is reset
+            self.step_counter = 0
+            
+            # Clear previous logs
+            with open(os.path.join(self.session_dir, "execution_log.txt"), "w") as log_file:
+                log_file.write(f"Starting execution at {datetime.datetime.now()}\n\n")
+            
+            # Take an initial screenshot to analyze the starting state
+            initial_screenshot = self.capture_step_screenshot("Initial screen state")
+            if initial_screenshot and self.ai_manager is not None:
+                # Detect UI elements in the initial screenshot
+                self.ai_manager.detect_ui_elements(initial_screenshot)
+                # Annotate the screenshot
+                if callable(getattr(self.ai_manager, 'annotate_detected_ui_elements', None)):
+                    annotated_path = self.ai_manager.annotate_detected_ui_elements(initial_screenshot)
+                    if annotated_path and hasattr(self, 'on_step_screenshot') and callable(self.on_step_screenshot):
+                        self.on_step_screenshot(self.step_counter, "Initial screen analysis", annotated_path)
+            # Iterate through commands
+            for i, command in enumerate(commands):
+                # Parse command
+                if ':' not in command:
+                    print(f"Invalid command format: {command}")
+                    continue
+                cmd_type, cmd_value = command.split(':', 1)
+                cmd_type = cmd_type.strip().lower()
+                cmd_value = cmd_value.strip()
+                print(f"Executing command {i+1}/{len(commands)}: {cmd_type} - {cmd_value}")
+                # Take a screenshot before action
+                before_screenshot = self.capture_step_screenshot(f"Before {cmd_type}: {cmd_value}")
+                # Execute command based on type
+                action_success = False
+                if cmd_type == 'click':
+                    # Determine if the target is a UI element name, text description, or coordinates
+                    if cmd_value.startswith('[') and cmd_value.endswith(']'):
+                        # Coordinates, e.g. [100, 200]
                         try:
-                            kwargs[key] = int(value)
-                        except (ValueError, TypeError):
-                            kwargs[key] = value
-                    elif key == 'duration' and isinstance(value, str):
-                        try:
-                            kwargs[key] = float(value)
-                        except (ValueError, TypeError):
-                            kwargs[key] = value
+                            coords = eval(cmd_value)  # Safe for simple list evaluation
+                            if isinstance(coords, list) and len(coords) == 2:
+                                self.perform_action("click", target=tuple(coords))
+                                action_success = True
+                            else:
+                                print(f"Invalid coordinates: {cmd_value}")
+                        except Exception as e:
+                            print(f"Error parsing coordinates: {str(e)}")
                     else:
-                        kwargs[key] = value
-                
-                # Execute the action
-                try:
-                    # Convert target to actual UI element if it exists
-                    if target and target in self.ui_elements:
-                        self.perform_action(action_type, target=target, text=text, **kwargs)
-                    else:
-                        self.perform_action(action_type, target=target, text=text, **kwargs)
-                except Exception as e:
-                    print(f"Error executing action: {str(e)}")
-                    
-                # Add more delay between actions
-                import time
+                        # Text description or UI element name
+                        if cmd_value in self.ui_elements:
+                            # It's a known UI element
+                            self.perform_action("click", target=cmd_value)
+                            action_success = True
+                        else:
+                            # Try OCR-based click
+                            success = self.click_on_text(cmd_value)
+                            if not success:
+                                print(f"Text not found: {cmd_value}")
+                                # Capture failed attempt
+                                self.capture_step_screenshot(f"ERROR: Text not found: {cmd_value}")
+                            else:
+                                action_success = True
+                elif cmd_type == 'type':
+                    self.perform_action("type", text=cmd_value)
+                    action_success = True
+                elif cmd_type == 'wait':
+                    try:
+                        seconds = float(cmd_value)
+                        self.perform_action("wait", duration=seconds)
+                        action_success = True
+                    except ValueError:
+                        print(f"Invalid wait time: {cmd_value}")
+                elif cmd_type == 'press':
+                    self.perform_action("key_press", text=cmd_value)
+                    action_success = True
+                else:
+                    print(f"Unknown command type: {cmd_type}")
+                    continue
+                # Always wait a bit after each action to let the UI update
                 time.sleep(1.0)
-            
-            # Add delay between commands to allow applications to open
-            import time
-            time.sleep(2.0)
-    
-    def click_on_text(self, text, region=None):
-        """Find and click on text visible on screen"""
-        if self.ocr_utils:
-            return self.ocr_utils.click_on_text(text, region)
-        else:
-            print("Warning: OCR utils not initialized")
+                # Take a screenshot after each action for AI analysis
+                after_screenshot = self.capture_step_screenshot(f"After {cmd_type}: {cmd_value}")
+                if after_screenshot:
+                    screenshot_paths.append(after_screenshot)
+                    # Use AI to analyze the current step - ALWAYS do this for every step
+                    if self.ai_manager is not None:
+                        try:
+                            # Create an action description for the analysis
+                            action_desc = f"{cmd_type}: {cmd_value}"
+                            # First detect UI elements in the screenshot
+                            ui_elements = self.ai_manager.detect_ui_elements(after_screenshot)
+                            print(f"Detected {len(ui_elements) if ui_elements else 0} UI elements in screenshot")
+                            # Analyze this step with AI if the method exists
+                            if callable(getattr(self.ai_manager, 'analyze_current_step', None)):
+                                analysis = self.ai_manager.analyze_current_step(
+                                    after_screenshot, 
+                                    self.step_counter,
+                                    action_desc
+                                )
+                                # Log the analysis
+                                if analysis:
+                                    success_status = analysis.get('success')
+                                    explanation = analysis.get('explanation', 'No explanation provided')
+                                    next_suggestion = analysis.get('next_action_suggestion', '')
+                                    print(f"Step {self.step_counter} analysis: Success={success_status}, {explanation}")
+                                    # Write analysis to log file
+                                    with open(os.path.join(self.session_dir, "execution_log.txt"), "a") as log_file:
+                                        log_file.write(f"AI Analysis Step {self.step_counter}:\n")
+                                        log_file.write(f"  Command: {action_desc}\n")
+                                        log_file.write(f"  Success: {success_status}\n")
+                                        log_file.write(f"  Explanation: {explanation}\n")
+                                        if next_suggestion:
+                                            log_file.write(f"  Next suggestion: {next_suggestion}\n")
+                                        log_file.write("\n")
+                                    # Update overall success status
+                                    if success_status is False:  # Only update if explicitly False
+                                        overall_success = False
+                                    # Annotate the screenshot with analysis results
+                                    annotated_path = self.ai_manager.annotate_detected_ui_elements(after_screenshot)
+                                    # Update step card if callback is available
+                                    if hasattr(self, 'on_step_screenshot') and callable(self.on_step_screenshot):
+                                        # Add AI analysis to the description
+                                        ai_desc = f"{action_desc} - {explanation}"
+                                        # Use annotated image if available, otherwise use original
+                                        image_to_use = annotated_path if annotated_path else after_screenshot
+                                        self.on_step_screenshot(self.step_counter, ai_desc, image_to_use)
+                                else:
+                                    print("Warning: analyze_current_step method not available in AI manager")
+                                    # Annotate the screenshot with detected UI elements
+                                    if callable(getattr(self.ai_manager, 'annotate_detected_ui_elements', None)):
+                                        annotated_path = self.ai_manager.annotate_detected_ui_elements(after_screenshot)
+                                        if annotated_path and hasattr(self, 'on_step_screenshot') and callable(self.on_step_screenshot):
+                                            self.on_step_screenshot(self.step_counter, f"{cmd_type}: {cmd_value} - UI elements detected", annotated_path)
+                        except Exception as e:
+                            print(f"Error analyzing step with AI: {str(e)}")
+                            import traceback
+                            traceback.print_exc()
+                else:
+                    print("Warning: Failed to capture screenshot after action")
+                # Wait between commands
+                time.sleep(0.5)
+            print(f"Command execution completed successfully")
+            # Check if there was a failure detected by AI
+            final_status = "✓ All steps completed successfully" if overall_success else "⚠️ Some steps had issues"
+            print(final_status)
+            # Write final status to log
+            with open(os.path.join(self.session_dir, "execution_log.txt"), "a") as log_file:
+                log_file.write(f"\nFinal Status: {final_status}\n")
+            return self.session_dir
+        except Exception as e:
+            print(f"Error executing commands: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False
     
-    def find_text_on_screen(self, text, region=None):
-        """Find text on screen and return its location"""
-        if self.ocr_utils:
-            return self.ocr_utils.find_text_on_screen(text, region)
-        else:
-            print("Warning: OCR utils not initialized")
-            return None
+    def click_on_text(self, text, region=None):
+        """Click on text found on screen using OCR
+        
+        Args:
+            text: Text to find and click on
+            region: Region to search in (x, y, width, height)
             
+        Returns:
+            bool: True if found and clicked, False otherwise
+        """
+        location = self.find_text_on_screen(text, region)
+        if location:
+            x, y = location
+            self.perform_action("click", target=(x, y))
+            return True
+        return False
+    
+    def find_text_on_screen(self, text, region=None):
+        """Find text on screen using OCR
+        
+        Args:
+            text: Text to find
+            region: Region to search in (x, y, width, height)
+            
+        Returns:
+            tuple: (x, y) coordinates of the text or None if not found
+        """
+        # Capture a screenshot before searching
+        self.capture_step_screenshot(f"Looking for text: {text}")
+        
+        # Try to use OCR to find the text
+        screen_text = self.get_screen_text_ocr(region)
+        
+        # This is a simplified implementation - in a real application
+        # you would want to do more sophisticated text matching and
+        # get the actual position of the text from the OCR engine
+        if screen_text and text.lower() in screen_text.lower():
+            # For now, just return the center of the region or screen
+            if region:
+                x = region[0] + region[2] // 2
+                y = region[1] + region[3] // 2
+            else:
+                screen_width, screen_height = pyautogui.size()
+                x = screen_width // 2
+                y = screen_height // 2
+            return x, y
+        return None
+        
     def get_screen_text_ocr(self, region=None):
-        """Extract text from screen using OCR"""
-        if self.ocr_utils:
-            return self.ocr_utils.get_screen_text_ocr(region)
-        else:
-            print("Warning: OCR utils not initialized")
+        """Get text from screen using OCR
+        
+        Args:
+            region: Region to get text from (x, y, width, height)
+            
+        Returns:
+            str: Text found on screen or empty string if OCR failed
+        """
+        try:
+            # Import pytesseract for OCR
+            import pytesseract
+            
+            # Take a screenshot of the specified region or the entire screen
+            screenshot = self.take_screenshot(region)
+            
+            if screenshot:
+                # Use pytesseract to get text from the screenshot
+                text = pytesseract.image_to_string(screenshot)
+                return text
+        except Exception as e:
+            print(f"OCR error: {str(e)}")
+        
             return ""
+        
+    def set_ai_manager(self, ai_manager):
+        """Set the AI manager for this controller
+        
+        Args:
+            ai_manager: The AI manager instance
+        """
+        self.ai_manager = ai_manager
 
 
 def main():

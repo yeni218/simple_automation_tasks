@@ -1,0 +1,12 @@
+Step 1: Before click on search icon
+Step 2: ERROR: click failed - Unknown target: search icon
+Step 3: Before type
+Step 4: After type
+Step 5: Before key_press
+Step 6: After key_press
+Step 7: Before wait
+Step 8: After wait
+Step 9: Before click on rectangle shape tool
+Step 10: ERROR: click failed - Unknown target: rectangle shape tool
+Step 11: Before click on paint canvas
+Step 12: ERROR: click failed - Unknown target: paint canvas

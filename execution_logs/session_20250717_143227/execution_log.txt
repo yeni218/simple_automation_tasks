@@ -1,0 +1,12 @@
+Step 1: Looking for text: Search bar
+Step 2: ERROR: Text not found: Search bar
+Step 3: Before type
+Step 4: After type
+Step 5: Before key_press
+Step 6: After key_press
+Step 7: Before wait
+Step 8: After wait
+Step 9: Looking for text: Rectangle shape tool
+Step 10: ERROR: Text not found: Rectangle shape tool
+Step 11: Looking for text: Paint canvas
+Step 12: ERROR: Text not found: Paint canvas

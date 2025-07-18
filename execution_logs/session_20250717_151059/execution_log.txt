@@ -1,0 +1,14 @@
+Step 1: Before key_press
+Step 2: After key_press
+Step 3: Before type
+Step 4: After type
+Step 5: Before key_press
+Step 6: After key_press
+Step 7: Before wait
+Step 8: After wait
+Step 9: Before click on (600, 70)
+Step 10: After click on (600, 70)
+Step 11: Before click on (400, 300)
+Step 12: After click on (400, 300)
+Step 13: Before click on (800, 600)
+Step 14: After click on (800, 600)

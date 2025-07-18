@@ -46,7 +46,7 @@ class PromptTabManager:
         ctk.CTkLabel(model_row, text="Model:", width=120).pack(side=tk.LEFT, padx=5)
         
         models = ["qwen/qwen3-14b", "phi-3-mini-4k-instruct", "phi-3-medium-4k-instruct", "gpt-4-vision-preview"]
-        self.model_var = tk.StringVar(value=self.controller.model)
+        self.model_var = tk.StringVar(value=self.controller.ai_manager.model_name if hasattr(self.controller, 'ai_manager') and hasattr(self.controller.ai_manager, 'model_name') else "")
         self.model_combo = ctk.CTkComboBox(model_row, values=models, variable=self.model_var, width=250)
         self.model_combo.pack(side=tk.LEFT, padx=5)
         
@@ -107,7 +107,7 @@ class PromptTabManager:
         
         if model:
             self.ai_manager.set_model(model)
-            self.controller.model = model
+            self.controller.ai_manager.model_name = model
             
         messagebox.showinfo("Success", "API settings updated")
             
